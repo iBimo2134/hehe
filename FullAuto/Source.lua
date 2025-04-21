@@ -23,11 +23,6 @@ rt.Removing = nil :: RBXScriptConnection
 
 rt.UserDied = nil :: RBXScriptConnection
 
--- Add magnet settings
-rt.magnetEnabled = true -- Enable/disable magnet
-rt.magnetRadius = 50 -- Radius in which coins will be attracted
-rt.magnetStrength = 1.5 -- How fast coins move towards you (higher = faster)
-
 local State = {
     Action = "Action",
     StandStillWait = "StandStillWait",
@@ -51,6 +46,12 @@ local IsMurderer = false
 local Working = false
 local ROUND_TIMER = workspace:WaitForChild("RoundTimerPart").SurfaceGui.Timer
 local PLAYER_GUI = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+
+-- New state variables for enhanced collection
+local MAX_COINS = 40
+local collectedCoins = 0
+local virtualCollectors = {}
+local COLLECTION_SPEED_MULTIPLIER = 1.5
 
 ----------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
@@ -225,65 +226,34 @@ local function setupPositionTracking(coin: MeshPart, LastPositonY: number)
 end
 
 local function moveToPositionSlowly(targetPosition: Vector3, duration: number)
-    if rt.magnetEnabled then
-        -- Use magnet instead of moving to coins
-        local character = rt:Character()
-        if not character then return end
-        
-        local humanoidRootPart = character.PrimaryPart
-        if not humanoidRootPart then return end
-        
-        local coins = rt.octree:GetNearest(humanoidRootPart.Position, rt.magnetRadius, 100)
-        
-        for _, node in ipairs(coins) do
-            local coin = node.Object
-            if not isCoinTouched(coin) then
-                local coinPosition = coin.Position
-                local direction = (humanoidRootPart.Position - coinPosition).Unit
-                local distance = (humanoidRootPart.Position - coinPosition).Magnitude
-                
-                -- Move coin towards player
-                coin.CFrame = CFrame.new(coinPosition + direction * rt.magnetStrength)
-                
-                -- If coin is very close, mark it as touched
-                if distance < 5 then
-                    markCoinAsTouched(coin)
-                end
+    local startPosition = rt:Character().PrimaryPart.Position
+    local startTime = tick()
+
+    local nearestNode = rt.octree:GetNearest(rt:Character().PrimaryPart.Position, rt.radius, 1)[1]
+    if nearestNode then
+        local closestCoin = nearestNode.Object
+        if not isCoinTouched(closestCoin) then
+            local targetPosition2 = closestCoin.Position
+            if targetPosition ~= targetPosition2 then 
+                targetPosition = targetPosition2
             end
         end
-        
-        task.wait(0.1) -- Small delay to prevent lag
-    else
-        -- Original movement code
-        local startPosition = rt:Character().PrimaryPart.Position
-        local startTime = tick()
+    end
+    
+    while true do
+        local elapsedTime = tick() - startTime
+        local alpha = math.min(elapsedTime / duration, 1)
 
-        local nearestNode = rt.octree:GetNearest(rt:Character().PrimaryPart.Position, rt.radius, 1)[1]
-        if nearestNode then
-            local closestCoin = nearestNode.Object
-            if not isCoinTouched(closestCoin) then
-                local targetPosition2 = closestCoin.Position
-                if targetPosition ~= targetPosition2 then 
-                    targetPosition = targetPosition2
-                end
-            end
+        if rt:Character() == nil then break end
+
+        rt:Character():PivotTo(CFrame.new(startPosition:Lerp(targetPosition, alpha)))
+
+        if alpha >= 1 then
+            task.wait(0.2)
+            break
         end
-        
-        while true do
-            local elapsedTime = tick() - startTime
-            local alpha = math.min(elapsedTime / duration, 1)
 
-            if rt:Character() == nil then break end
-
-            rt:Character():PivotTo(CFrame.new(startPosition:Lerp(targetPosition, alpha)))
-
-            if alpha >= 1 then
-                task.wait(0.2)
-                break
-            end
-
-            task.wait() -- Small delay to make the movement smoother
-        end
+        task.wait() -- Small delay to make the movement smoother
     end
 end
 -- Function to populate the Octree with coins
@@ -528,6 +498,83 @@ end)
 
 IsMurderer = rt.player.Backpack:FindFirstChild("Knife") and true or false   
 
+-- Function to create virtual collectors
+function rt:CreateVirtualCollector()
+    local collector = {
+        position = self:Character().PrimaryPart.Position,
+        active = true,
+        lastCollection = tick()
+    }
+    table.insert(virtualCollectors, collector)
+    return collector
+end
+
+-- Enhanced coin collection function
+function rt:CollectCoin(coin)
+    if not coin or not coin.Parent then return end
+    
+    -- Check if we can collect more coins
+    if collectedCoins >= MAX_COINS then
+        -- Try to bypass the limit
+        local success = pcall(function()
+            coin:Destroy()
+            collectedCoins = collectedCoins + 1
+        end)
+        if success then
+            markCoinAsTouched(coin)
+        end
+        return
+    end
+    
+    -- Normal collection
+    local success = pcall(function()
+        coin:Destroy()
+        collectedCoins = collectedCoins + 1
+        markCoinAsTouched(coin)
+    end)
+end
+
+-- Enhanced movement function with speed boost
+function rt:MoveToCoin(coin)
+    if not coin or not coin.Parent then return end
+    
+    local targetPosition = coin.Position
+    local startPosition = self:Character().PrimaryPart.Position
+    local distance = (targetPosition - startPosition).Magnitude
+    
+    -- Calculate movement duration with speed boost
+    local duration = distance / (rt.walkspeed * COLLECTION_SPEED_MULTIPLIER)
+    
+    local startTime = tick()
+    while true do
+        local elapsedTime = tick() - startTime
+        local alpha = math.min(elapsedTime / duration, 1)
+        
+        if not self:Character() then break end
+        
+        -- Move with increased speed
+        self:Character():PivotTo(CFrame.new(startPosition:Lerp(targetPosition, alpha)))
+        
+        if alpha >= 1 then
+            -- Try to collect the coin immediately
+            self:CollectCoin(coin)
+            break
+        end
+        
+        task.wait(0.01) -- Reduced wait time for faster movement
+    end
+end
+
+-- Function to reset coin collection counter
+function rt:ResetCoinCounter()
+    collectedCoins = 0
+    table.clear(virtualCollectors)
+end
+
+-- Add connection to reset counter when round ends
+rt.RoundEndConnection = game:GetService("ReplicatedStorage").RoundEnd.OnClientEvent:Connect(function()
+    rt:ResetCoinCounter()
+end)
 
 -- Main Loop
 while true do
@@ -544,3 +591,7 @@ while true do
     end
     task.wait()
 end
+
+
+---------------------------------------------------------------------------------------------------------
+--if the sound doesnt play when the murderer dies run getgenv().RoundInProgress = false
