@@ -323,6 +323,9 @@ local function ResetBag()
     task.wait(2) -- Respawn hone ka wait karo
     rt:GetCharacterLoaded() -- Character load hone ka wait karo
     BagIsFull = false
+
+    -- Player ke attributes update karo
+    rt.player:SetAttribute("Coins", 0) -- Ya jo bhi attribute aapko reset karna hai
     rt:Message("Info", "Bag has been reset!", 2)
 end
 
@@ -333,9 +336,10 @@ local function CollectCoins()
     while CurrentState == State.Action do
         if IsBagFull() then
             rt:Message("Alert", "Bag is full! Resetting...", 2)
-            ResetBag() -- Bag ko reset karo
-            task.wait(1) -- Reset hone ka wait karo
-            -- Continue farming without changing state
+            ResetBag() -- Automatically reset the bag
+            task.wait(1) -- Wait for reset to complete
+            -- Manually change game state if needed
+            ChangeState(State.WaitingForRound) -- Ya koi aur state
         end
 
         if rt:Character() == nil then
