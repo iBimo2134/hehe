@@ -1,0 +1,111 @@
+return function (Iris, WayPointsTable: table, Character: Model)
+
+    local function helpMarker(helpText: string)
+        Iris.PushConfig({ TextColor = Iris._config.TextDisabledColor })
+        local text = Iris.Text({ "(?)" })
+        Iris.PopConfig()
+
+        Iris.PushConfig({ ContentWidth = UDim.new(0, 350) })
+        if text.hovered() then
+            Iris.Tooltip({ helpText })
+        end
+        Iris.PopConfig()
+    end
+
+    local function WaypointWindow()
+        Iris.Window({ "Waypoint Manager", [Iris.Args.Window.NoClose] = true })
+
+            -- Dropdown (tree) for waypoints
+            Iris.SameLine()
+                helpMarker("Double click to Teleport")
+                Iris.Tree({ "Waypoints" })
+                local waypointList = Iris.State({})
+                local sharedwaypoint = Iris.State(1)
+                local selectedWaypoint = Iris.State(0)
+                local inputtext = Iris.State("")
+                local waypointName = Iris.State("waypoint")
+
+                for i, waypoint in ipairs(waypointList:get()) do
+                    local item = Iris.Selectable({ waypoint, i }, { index = sharedwaypoint })
+
+                    if item.doubleClicked() then
+                        print("Waypoint double-clicked:", waypoint)
+                        -- Handle double-click logic
+                        for _, rtwaypoint in ipairs(WayPointsTable) do
+                            if rtwaypoint.name == waypoint then
+                                Character:PivotTo(rtwaypoint.waypoint)
+                                break
+                            end
+                        end
+                    end
+
+                    if item.selected() then
+                        selectedWaypoint:set(i)
+                    end
+                end
+                Iris.End() -- End Tree
+            Iris.End()
+            -- Separator
+            Iris.Separator()
+
+            -- Text Input and Help Marker
+            Iris.SameLine()
+
+            helpMarker("Not required but Recommended")
+            Iris.InputText({ "", "way point name" }, { text = inputtext })
+            
+            Iris.End()
+
+            -- Add Waypoint Button
+            if Iris.Button({ "Add Waypoint" }).clicked() then
+                local newWaypoint
+                local name = inputtext:get() ~= "" and inputtext:get() or waypointName:get() .. #waypointList:get() + 1
+                if inputtext:get() == "" then
+                    table.insert(waypointList:get(), name)
+                    sharedwaypoint:set(#waypointList:get())
+
+                    newWaypoint = { name = name, waypoint = Character:GetPivot() }
+                    table.insert(WayPointsTable, newWaypoint)
+                    inputtext:set("")
+                    return Iris.End()
+                end
+
+                table.insert(waypointList:get(), name)
+                sharedwaypoint:set(#waypointList:get())
+
+                newWaypoint = { name = name, waypoint = Character:GetPivot() }
+                table.insert(WayPointsTable, newWaypoint)
+                inputtext:set("")
+            end
+
+            -- Remove Selected Waypoint Button
+            if Iris.Button({ "Remove Selected" }).clicked() then
+                local selectedIndex = selectedWaypoint:get()
+                if selectedIndex ~= 0 then
+                    local selectedName = waypointList:get()[selectedIndex]
+
+                    -- Remove from waypointList
+                    local waypoints = waypointList:get()
+                    table.remove(waypoints, selectedIndex)
+                    waypointList:set(waypoints)
+
+                    -- Reset selection
+                    selectedWaypoint:set(0)
+
+                    -- Remove from rt.Settings.WayPoints
+                    for i, waypoint in ipairs(WayPointsTable) do
+                        if waypoint.name == selectedName then
+                            table.remove(WayPointsTable, i)
+                            break
+                        end
+                    end
+                end
+            end
+
+        Iris.End() -- End Window
+    end
+
+
+    Iris:Connect(WaypointWindow)
+
+end 
