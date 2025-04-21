@@ -47,12 +47,6 @@ local Working = false
 local ROUND_TIMER = workspace:WaitForChild("RoundTimerPart").SurfaceGui.Timer
 local PLAYER_GUI = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
 
--- New state variables for enhanced collection
-local MAX_COINS = 40
-local collectedCoins = 0
-local virtualCollectors = {}
-local COLLECTION_SPEED_MULTIPLIER = 1.5
-
 ----------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 function rt:Message(_Title, _Text, Time)
@@ -323,15 +317,25 @@ local function RespawnAndTeleportBack()
     end
 end
 
+local function ResetBag()
+    -- Player ko respawn karo
+    rt:Character():FindFirstChildWhichIsA("Humanoid"):ChangeState(Enum.HumanoidStateType.Dead)
+    task.wait(2) -- Respawn hone ka wait karo
+    rt:GetCharacterLoaded() -- Character load hone ka wait karo
+    BagIsFull = false
+    rt:Message("Info", "Bag has been reset!", 2)
+end
+
 local function CollectCoins()
     Working = true
     rt.coinContainer = rt:Map():FindFirstChild("CoinContainer")
     populateOctree()
     while CurrentState == State.Action do
         if IsBagFull() then
-            rt:Message("Alert", "Bag is full!", 2)
-            BagIsFull = true
-            break
+            rt:Message("Alert", "Bag is full! Resetting...", 2)
+            ResetBag() -- Bag ko reset karo
+            task.wait(1) -- Reset hone ka wait karo
+            -- Continue farming without changing state
         end
 
         if rt:Character() == nil then
@@ -498,83 +502,6 @@ end)
 
 IsMurderer = rt.player.Backpack:FindFirstChild("Knife") and true or false   
 
--- Function to create virtual collectors
-function rt:CreateVirtualCollector()
-    local collector = {
-        position = self:Character().PrimaryPart.Position,
-        active = true,
-        lastCollection = tick()
-    }
-    table.insert(virtualCollectors, collector)
-    return collector
-end
-
--- Enhanced coin collection function
-function rt:CollectCoin(coin)
-    if not coin or not coin.Parent then return end
-    
-    -- Check if we can collect more coins
-    if collectedCoins >= MAX_COINS then
-        -- Try to bypass the limit
-        local success = pcall(function()
-            coin:Destroy()
-            collectedCoins = collectedCoins + 1
-        end)
-        if success then
-            markCoinAsTouched(coin)
-        end
-        return
-    end
-    
-    -- Normal collection
-    local success = pcall(function()
-        coin:Destroy()
-        collectedCoins = collectedCoins + 1
-        markCoinAsTouched(coin)
-    end)
-end
-
--- Enhanced movement function with speed boost
-function rt:MoveToCoin(coin)
-    if not coin or not coin.Parent then return end
-    
-    local targetPosition = coin.Position
-    local startPosition = self:Character().PrimaryPart.Position
-    local distance = (targetPosition - startPosition).Magnitude
-    
-    -- Calculate movement duration with speed boost
-    local duration = distance / (rt.walkspeed * COLLECTION_SPEED_MULTIPLIER)
-    
-    local startTime = tick()
-    while true do
-        local elapsedTime = tick() - startTime
-        local alpha = math.min(elapsedTime / duration, 1)
-        
-        if not self:Character() then break end
-        
-        -- Move with increased speed
-        self:Character():PivotTo(CFrame.new(startPosition:Lerp(targetPosition, alpha)))
-        
-        if alpha >= 1 then
-            -- Try to collect the coin immediately
-            self:CollectCoin(coin)
-            break
-        end
-        
-        task.wait(0.01) -- Reduced wait time for faster movement
-    end
-end
-
--- Function to reset coin collection counter
-function rt:ResetCoinCounter()
-    collectedCoins = 0
-    table.clear(virtualCollectors)
-end
-
--- Add connection to reset counter when round ends
-rt.RoundEndConnection = game:GetService("ReplicatedStorage").RoundEnd.OnClientEvent:Connect(function()
-    rt:ResetCoinCounter()
-end)
 
 -- Main Loop
 while true do
