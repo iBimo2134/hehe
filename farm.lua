@@ -1,5 +1,5 @@
 -- v2 Made By Zynic
-local Octree = require("octa_tree")
+local Octree = loadstring(game:HttpGet("https://raw.githubusercontent.com/iBimo2134/hehe/main/octa_tree.lua", true))()
 local rt = {} -- Removable table
 rt.Players = game:GetService("Players")
 rt.player = rt.Players.LocalPlayer
