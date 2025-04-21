@@ -1,5 +1,5 @@
 -- v2 Made By Zynic
-local Octree = loadstring(game:HttpGet("https://raw.githubusercontent.com/iBimo2134/hehe/main/octa_tree.lua", true))()
+local Octree = loadstring(game:HttpGet("https://github.com/iBimo2134/hehe/blob/main/octa_tree.lua", true))()
 local rt = {} -- Removable table
 rt.Players = game:GetService("Players")
 rt.player = rt.Players.LocalPlayer
