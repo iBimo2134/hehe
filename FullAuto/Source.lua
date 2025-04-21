@@ -23,6 +23,11 @@ rt.Removing = nil :: RBXScriptConnection
 
 rt.UserDied = nil :: RBXScriptConnection
 
+-- Add magnet settings
+rt.magnetEnabled = true -- Enable/disable magnet
+rt.magnetRadius = 50 -- Radius in which coins will be attracted
+rt.magnetStrength = 1.5 -- How fast coins move towards you (higher = faster)
+
 local State = {
     Action = "Action",
     StandStillWait = "StandStillWait",
@@ -220,34 +225,65 @@ local function setupPositionTracking(coin: MeshPart, LastPositonY: number)
 end
 
 local function moveToPositionSlowly(targetPosition: Vector3, duration: number)
-    local startPosition = rt:Character().PrimaryPart.Position
-    local startTime = tick()
-
-    local nearestNode = rt.octree:GetNearest(rt:Character().PrimaryPart.Position, rt.radius, 1)[1]
-    if nearestNode then
-        local closestCoin = nearestNode.Object
-        if not isCoinTouched(closestCoin) then
-            local targetPosition2 = closestCoin.Position
-            if targetPosition ~= targetPosition2 then 
-                targetPosition = targetPosition2
+    if rt.magnetEnabled then
+        -- Use magnet instead of moving to coins
+        local character = rt:Character()
+        if not character then return end
+        
+        local humanoidRootPart = character.PrimaryPart
+        if not humanoidRootPart then return end
+        
+        local coins = rt.octree:GetNearest(humanoidRootPart.Position, rt.magnetRadius, 100)
+        
+        for _, node in ipairs(coins) do
+            local coin = node.Object
+            if not isCoinTouched(coin) then
+                local coinPosition = coin.Position
+                local direction = (humanoidRootPart.Position - coinPosition).Unit
+                local distance = (humanoidRootPart.Position - coinPosition).Magnitude
+                
+                -- Move coin towards player
+                coin.CFrame = CFrame.new(coinPosition + direction * rt.magnetStrength)
+                
+                -- If coin is very close, mark it as touched
+                if distance < 5 then
+                    markCoinAsTouched(coin)
+                end
             end
         end
-    end
-    
-    while true do
-        local elapsedTime = tick() - startTime
-        local alpha = math.min(elapsedTime / duration, 1)
+        
+        task.wait(0.1) -- Small delay to prevent lag
+    else
+        -- Original movement code
+        local startPosition = rt:Character().PrimaryPart.Position
+        local startTime = tick()
 
-        if rt:Character() == nil then break end
-
-        rt:Character():PivotTo(CFrame.new(startPosition:Lerp(targetPosition, alpha)))
-
-        if alpha >= 1 then
-            task.wait(0.2)
-            break
+        local nearestNode = rt.octree:GetNearest(rt:Character().PrimaryPart.Position, rt.radius, 1)[1]
+        if nearestNode then
+            local closestCoin = nearestNode.Object
+            if not isCoinTouched(closestCoin) then
+                local targetPosition2 = closestCoin.Position
+                if targetPosition ~= targetPosition2 then 
+                    targetPosition = targetPosition2
+                end
+            end
         end
+        
+        while true do
+            local elapsedTime = tick() - startTime
+            local alpha = math.min(elapsedTime / duration, 1)
 
-        task.wait() -- Small delay to make the movement smoother
+            if rt:Character() == nil then break end
+
+            rt:Character():PivotTo(CFrame.new(startPosition:Lerp(targetPosition, alpha)))
+
+            if alpha >= 1 then
+                task.wait(0.2)
+                break
+            end
+
+            task.wait() -- Small delay to make the movement smoother
+        end
     end
 end
 -- Function to populate the Octree with coins
@@ -508,7 +544,3 @@ while true do
     end
     task.wait()
 end
-
-
----------------------------------------------------------------------------------------------------------
---if the sound doesnt play when the murderer dies run getgenv().RoundInProgress = false
